@@ -4,31 +4,6 @@
 //                                                                                                          //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//
-// Notes:
-//
-//  "Heltec WiFi Kit 32 NTP Clock" is a ntp initialized date and time clock.  The device connects to the
-// an ntp time server via wifi and a udp port, obtains the ntp time from the server, adjusts then writes
-// the time to the ESP32 rtc (real time clock), and displays the date and time on the built in OLED display.
-//
-//  Upon startup, the code initializes the serial port, wifi, graphics and udp port.  The serial port is
-// used only during initialization to display when the wifi is connected and when the ntp time has been
-// received from the ntp server.  Wifi is used to communicate with the ntp server.  The graphics is used
-// to display the initialization and operational displays on the built in OLED.  Finally, the udp port
-// receives the ntp time from the ntp server.
-//
-//  The main loop performs two major functions; obtains the time from the ntp server and to update the oled.
-// In this example, the time is obtained from the ntp server only once, and upon receipt, is adjusted for
-// time zone then written into the ESP32 rtc (real time clock).  The OLED is updated once per pass, and there
-// is a 200ms delay in the main loop so the OLED is updated 5 times a second.
-//
-//  Before compiling and downloading the code, adjust the following settings:
-//
-//  1) TIME_ZONE  - currently set to -6 for Oklahoma (my home state), adjust to your timezone.
-//  2) chPassword - currently set to "YourWifiPassword", adjust to your wifi password.
-//  3) chSSID     - currently set to "YourWifiSsid", adjust to your wifi ssid.
-//
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Includes.
@@ -38,32 +13,47 @@
 #include                              <time.h>                              // for time calculations
 #include                              <WiFi.h>                              // for wifi
 #include                              <WiFiUdp.h>                           // for udp via wifi
-#include <Aquabo_E32_Screens.h>
+#include                              <U8g2lib.h>                           // see https://github.com/olikraus/u8g2/wiki/u8g2reference
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Constants.
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+//// WIFI ////
 #define   NTP_DELAY_COUNT               20                                  // delay count for ntp update
 #define   NTP_PACKET_LENGTH             48                                  // ntp packet length
 #define   TIME_ZONE                     (-5)                                // offset from utc
 #define   UDP_PORT                      4000                                // UDP listen port
-
+//// SCREENS ////
+#define FONT_ONE_HEIGHT 12 // font one height in pixels
+#define FONT_TWO_HEIGHT 18 // font two height in pixels
+#define FONT_ONE_PADDING 1 // padding superior para font 1
+#define FONT_TWO_PADDING 2 // padding superior para font 2
+//// INPUTS ////
+#define ANALOG_PIN_0 36
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Variables.
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-char      chBuffer[128];                                                    // general purpose character buffer
+//// TIMT ////
+char chBuffer[128];
+char chBuffer2[128];
+//// WIFI ////
 char      chPassword[] =                  "M0b1u$85";               // your network password
 char      chSSID[] =                      "Mobius_Hogar";                   // your network SSID
 bool      bTimeReceived =                 false;                            // time has not been received
 int       nWifiStatus =                   WL_IDLE_STATUS;                   // wifi status
 WiFiUDP   Udp;
-
+//// SCREENS ////
+char      chBufferVariable[128]; //buffer propio de los metodos titulo_1 y titulo_2
+String    cadena = "";
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C       u8g2(U8G2_R0, 16, 15, 4);         // OLED graphics
+static  int   screen = 0;
+//// INPUTS ////
+int analog_value = 0;
+int mapeado = 0;
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Setup.
@@ -94,8 +84,13 @@ void setup()
   sprintf(chBuffer, "NTP clock: WiFi connected to %s.", chSSID);
   Serial.println(chBuffer);
 
-  // Display connection stats.
-
+  //// SCREENS ////
+  u8g2.begin();
+  u8g2.setFont(u8g2_font_6x10_tr);
+  u8g2.setFontRefHeightExtendedText();
+  u8g2.setDrawColor(1);
+  u8g2.setFontPosTop();
+  u8g2.setFontDirection(0);
   // Clean the display buffer.
 
   u8g2.clearBuffer();
@@ -133,6 +128,26 @@ void setup()
   // Udp.
 
   Udp.begin(UDP_PORT);
+}
+
+//// SCREENS METHODS ////
+
+void titulo_2(String linea1, String linea2) {
+  u8g2.setFont(u8g2_font_6x10_tr);
+  linea1.toCharArray(chBufferVariable, linea1.length() + 1);
+  u8g2.drawStr(64 - (u8g2.getStrWidth(chBufferVariable) / 2), FONT_ONE_PADDING, chBufferVariable);
+
+  linea2.toCharArray(chBufferVariable, linea2.length() + 1);
+  u8g2.setFont(u8g2_font_fub11_tn);
+  u8g2.drawRFrame(0, 0, 128, FONT_TWO_HEIGHT + FONT_ONE_HEIGHT, 0);
+  u8g2.drawStr(64 - (u8g2.getStrWidth(chBufferVariable) / 2), FONT_ONE_HEIGHT + (FONT_TWO_PADDING), chBufferVariable);
+}
+
+void titulo_1(String mensaje) {
+  mensaje.toCharArray(chBufferVariable, mensaje.length() + 1);
+  u8g2.setFont(u8g2_font_6x10_tr);
+  u8g2.drawRFrame(0, 0, 128, FONT_ONE_HEIGHT, 0);
+  u8g2.drawStr(64 - (u8g2.getStrWidth(chBufferVariable) / 2), FONT_ONE_PADDING, chBufferVariable);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -269,25 +284,24 @@ void  loop()
     struct tm * tmPointer = localtime(& tvTimeValue.tv_sec);
 
     // Display the date.
-
-    u8g2.drawRFrame(0, 0, 128, FONT_TWO_HEIGHT + FONT_ONE_HEIGHT + 10, 4);
-
     strftime(chBuffer, sizeof(chBuffer), "%a, %d %b %Y",  tmPointer);
+    strftime(chBuffer2, sizeof(chBuffer2), "%I:%M:%S",  tmPointer);
+    titulo_2(String(chBuffer), String(chBuffer2));
+
+    //barra segun posicion del potenciometro en pin 36
+
+    u8g2.drawRFrame(0, 35, 128, 3, 0);
+    analog_value = analogRead(ANALOG_PIN_0);
+    mapeado = map(analog_value, 0, 4095, 0, 128);
+    u8g2.drawLine(0, 36, mapeado, 36);
+
     u8g2.setFont(u8g2_font_6x10_tr);
-    u8g2.drawStr(64 - (u8g2.getStrWidth(chBuffer) / 2), 2, chBuffer);
-
-    // Display the time.
-
-    strftime(chBuffer, sizeof(chBuffer), "%I:%M:%S",  tmPointer);
-    u8g2.setFont(u8g2_font_fub11_tn);
-    u8g2.drawStr(64 - (u8g2.getStrWidth(chBuffer) / 2), FONT_TWO_HEIGHT + 2, chBuffer);
-
-    // test Progress Bar
-
-    u8g2.drawRFrame(2, FONT_TWO_HEIGHT + FONT_ONE_HEIGHT + 15, 123, 3, 0);
-    strftime(chBuffer, sizeof(chBuffer), "%S", tmPointer);
-    u8g2.drawLine(2, FONT_TWO_HEIGHT + FONT_ONE_HEIGHT + 16, 3 + (String(chBuffer).toInt()) * 2, FONT_TWO_HEIGHT + FONT_ONE_HEIGHT + 16);
-
+    u8g2.drawStr(0, 40, "POT:");
+    String(analog_value).toCharArray(chBuffer,sizeof(chBuffer));
+    u8g2.drawStr(50, 40, chBuffer);
+    u8g2.drawStr(0, 50, "MAP :");
+    String(mapeado).toCharArray(chBuffer2,sizeof(chBuffer2));
+    u8g2.drawStr(50, 50, chBuffer2);
     // Send the display buffer to the OLED
     u8g2.sendBuffer();
   }
@@ -296,4 +310,6 @@ void  loop()
 
   delay(200);
 }
+
+
 
