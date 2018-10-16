@@ -20,6 +20,7 @@
 // Constants.
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 //// WIFI ////
 #define   NTP_DELAY_COUNT               20                                  // delay count for ntp update
 #define   NTP_PACKET_LENGTH             48                                  // ntp packet length
@@ -32,6 +33,9 @@
 #define FONT_TWO_PADDING 2 // padding superior para font 2
 //// INPUTS ////
 #define ANALOG_PIN_0 36
+#define TOUCH_1 13
+#define TOUCH_2 12
+#define TOUCH_3 14
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Variables.
@@ -54,6 +58,9 @@ static  int   screen = 0;
 //// INPUTS ////
 int analog_value = 0;
 int mapeado = 0;
+int touch_value_1 = 100;
+int touch_value_2 = 100;
+int touch_value_3 = 100;
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Setup.
@@ -91,42 +98,35 @@ void setup()
   u8g2.setDrawColor(1);
   u8g2.setFontPosTop();
   u8g2.setFontDirection(0);
-  // Clean the display buffer.
 
+  // Clean the display buffer.
   u8g2.clearBuffer();
 
   // Display the title.
-
   sprintf(chBuffer, "%s", "WiFi Stats:");
   u8g2.drawStr(64 - (u8g2.getStrWidth(chBuffer) / 2), 0, chBuffer);
 
   // Display the ip address assigned by the wifi router.
-
   char  chIp[81];
   WiFi.localIP().toString().toCharArray(chIp, sizeof(chIp) - 1);
   sprintf(chBuffer, "IP  : %s", chIp);
   u8g2.drawStr(0, FONT_ONE_HEIGHT * 2, chBuffer);
 
   // Display the ssid of the wifi router.
-
   sprintf(chBuffer, "SSID: %s", chSSID);
   u8g2.drawStr(0, FONT_ONE_HEIGHT * 3, chBuffer);
 
   // Display the rssi.
-
   sprintf(chBuffer, "RSSI: %d", WiFi.RSSI());
   u8g2.drawStr(0, FONT_ONE_HEIGHT * 4, chBuffer);
 
   // Display waiting for ntp message.
-
   u8g2.drawStr(0, FONT_ONE_HEIGHT * 6, "Awaiting NTP time...");
 
   // Now send the display buffer to the OLED.
-
   u8g2.sendBuffer();
 
   // Udp.
-
   Udp.begin(UDP_PORT);
 }
 
@@ -158,31 +158,26 @@ void titulo_1(String mensaje) {
 
 void  loop()
 {
-  // Local variables.
 
+  // Local variables.
   static  int   nNtpDelay = NTP_DELAY_COUNT;
   static  byte  chNtpPacket[NTP_PACKET_LENGTH];
 
   // Check for time to send ntp request.
-
   if (bTimeReceived == false)
   {
     // Have yet to receive time from the ntp server, update delay counter.
-
     nNtpDelay += 1;
 
     // Check for time to send ntp request.
-
     if (nNtpDelay >= NTP_DELAY_COUNT)
     {
-      // Time to send ntp request, reset delay.
 
+      // Time to send ntp request, reset delay.
       nNtpDelay = 0;
 
       // Send ntp time request.
-
       // Initialize ntp packet.
-
       // Zero out chNtpPacket.
 
       memset(chNtpPacket, 0, NTP_PACKET_LENGTH);
@@ -201,7 +196,6 @@ void  loop()
       chNtpPacket[0]  = 0b00011011;
 
       // Send the ntp packet.
-
       IPAddress ipNtpServer(129, 6, 15, 28);
       Udp.beginPacket(ipNtpServer, 123);
       Udp.write(chNtpPacket, NTP_PACKET_LENGTH);
@@ -214,19 +208,17 @@ void  loop()
     Serial.print(".");
 
     // Check for time to check for server response.
-
     if (nNtpDelay == (NTP_DELAY_COUNT - 1))
     {
-      // Time to check for a server response.
 
+      // Time to check for a server response.
       if (Udp.parsePacket())
       {
-        // Server responded, read the packet.
 
+        // Server responded, read the packet.
         Udp.read(chNtpPacket, NTP_PACKET_LENGTH);
 
         // Obtain the time from the packet, convert to Unix time, and adjust for the time zone.
-
         struct  timeval tvTimeValue = {0, 0};
 
         tvTimeValue.tv_sec = ((unsigned long)chNtpPacket[40] << 24) +       // bits 24 through 31 of ntp time
@@ -238,15 +230,12 @@ void  loop()
                              (5);                                           // transport delay fudge factor
 
         // Set the ESP32 rtc.
-
         settimeofday(& tvTimeValue, NULL);
 
         // Time has been received.
-
         bTimeReceived = true;
 
         // Output date and time to serial.
-
         struct tm * tmPointer = localtime(& tvTimeValue.tv_sec);
         strftime (chBuffer, sizeof(chBuffer), "%a, %d %b %Y %H:%M:%S",  tmPointer);
         Serial.println();
@@ -254,33 +243,29 @@ void  loop()
         Serial.println(chBuffer);
 
         // No longer need wifi.
-
         WiFi.mode(WIFI_OFF);
       }
       else
       {
-        // Server did not respond.
 
+        // Server did not respond.
         Serial.println("NTP clock: packet not received.");
       }
     }
   }
 
   // Update OLED.
-
   if (bTimeReceived)
   {
-    // Ntp time has been received, ajusted and written to the ESP32 rtc, so obtain the time from the ESP32 rtc.
 
+    // Ntp time has been received, ajusted and written to the ESP32 rtc, so obtain the time from the ESP32 rtc.
     struct  timeval tvTimeValue;
     gettimeofday(& tvTimeValue, NULL);
 
     // Erase the display buffer.
-
     u8g2.clearBuffer();
 
     // Obtain a pointer to local time.
-
     struct tm * tmPointer = localtime(& tvTimeValue.tv_sec);
 
     // Display the date.
@@ -289,7 +274,6 @@ void  loop()
     titulo_2(String(chBuffer), String(chBuffer2));
 
     //barra segun posicion del potenciometro en pin 36
-
     u8g2.drawRFrame(0, 35, 128, 3, 0);
     analog_value = analogRead(ANALOG_PIN_0);
     mapeado = map(analog_value, 0, 4095, 0, 128);
@@ -297,19 +281,38 @@ void  loop()
 
     u8g2.setFont(u8g2_font_6x10_tr);
     u8g2.drawStr(0, 40, "POT:");
-    String(analog_value).toCharArray(chBuffer,sizeof(chBuffer));
+    String(analog_value).toCharArray(chBuffer, sizeof(chBuffer));
     u8g2.drawStr(50, 40, chBuffer);
     u8g2.drawStr(0, 50, "MAP :");
-    String(mapeado).toCharArray(chBuffer2,sizeof(chBuffer2));
+    String(mapeado).toCharArray(chBuffer2, sizeof(chBuffer2));
     u8g2.drawStr(50, 50, chBuffer2);
     // Send the display buffer to the OLED
+
+    u8g2.drawStr(80, 40, "TOUCH:");
+    touch_value_1 = touchRead(TOUCH_1);
+    touch_value_2 = touchRead(TOUCH_2);
+    touch_value_3 = touchRead(TOUCH_3);
+    if (touch_value_1 < 50) {
+      String("S").toCharArray(chBuffer, sizeof(chBuffer));
+    } else {
+      String("N").toCharArray(chBuffer, sizeof(chBuffer));
+    }
+    u8g2.drawStr(80, 50, chBuffer);
+    if (touch_value_2 < 50) {
+      String("S").toCharArray(chBuffer, sizeof(chBuffer));
+    } else {
+      String("N").toCharArray(chBuffer, sizeof(chBuffer));
+    }
+    u8g2.drawStr(90, 50, chBuffer);
+    if (touch_value_3 < 50) {
+      String("S").toCharArray(chBuffer, sizeof(chBuffer));
+    } else {
+      String("N").toCharArray(chBuffer, sizeof(chBuffer));
+    }
+    u8g2.drawStr(100, 50, chBuffer);
     u8g2.sendBuffer();
   }
 
   // Give up some time.
-
   delay(200);
 }
-
-
-
