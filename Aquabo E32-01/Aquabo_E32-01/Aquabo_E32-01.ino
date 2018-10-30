@@ -55,6 +55,7 @@ char      chBufferVariable[128]; //buffer propio de los metodos titulo_1 y titul
 String    cadena = "";
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C       u8g2(U8G2_R0, 16, 15, 4);         // OLED graphics
 static  int   screen = 0;
+bool menu_avb = true;
 //// INPUTS ////
 int analog_value = 0;
 int mapeado = 0;
@@ -257,26 +258,43 @@ void  loop()
   // Update OLED.
   if (bTimeReceived)
   {
+    analog_value = analogRead(ANALOG_PIN_0);
+    mapeado = map(analog_value, 0, 4095, 0, 4);
 
-    // Ntp time has been received, ajusted and written to the ESP32 rtc, so obtain the time from the ESP32 rtc.
-    struct  timeval tvTimeValue;
-    gettimeofday(& tvTimeValue, NULL);
-
-    // Erase the display buffer.
     u8g2.clearBuffer();
 
-    // Obtain a pointer to local time.
+    struct  timeval tvTimeValue;
+    gettimeofday(& tvTimeValue, NULL);
     struct tm * tmPointer = localtime(& tvTimeValue.tv_sec);
-
-    // Display the date.
     strftime(chBuffer, sizeof(chBuffer), "%a, %d %b %Y",  tmPointer);
     strftime(chBuffer2, sizeof(chBuffer2), "%I:%M:%S",  tmPointer);
     titulo_2(String(chBuffer), String(chBuffer2));
+    u8g2.drawStr(0, 35, "S");//servicio
+    u8g2.drawStr(32, 35, "M");//manual
+    u8g2.drawStr(64, 35, "C");//configuracion
+    u8g2.drawStr(96, 35, "E");//estado
+    
+    if (menu_avb) {
+      switch (mapeado) {
+        case 0://main
+          u8g2.drawStr(
+          break;
+
+        case 1://Servicio
+
+          break;
+
+        case 2://control manual
+
+          break;
+      }
+    }
+
+    u8g2.sendBuffer();
 
     //barra segun posicion del potenciometro en pin 36
     u8g2.drawRFrame(0, 35, 128, 3, 0);
-    analog_value = analogRead(ANALOG_PIN_0);
-    mapeado = map(analog_value, 0, 4095, 0, 128);
+
     u8g2.drawLine(0, 36, mapeado, 36);
 
     u8g2.setFont(u8g2_font_6x10_tr);
